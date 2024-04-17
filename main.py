@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import filedialog, messagebox
-
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives import serialization
 
 class SignatureApp:
     def __init__(self, root):
@@ -57,6 +58,39 @@ class SignatureApp:
             return
         # Placeholder for encryption/decryption logic
         self.status.set("File encrypted/decrypted successfully (placeholder).")
+
+def generate_rsa_keys():
+    # Generate a private key
+    private_key = rsa.generate_private_key(
+        public_exponent=65537,
+        key_size=4096
+    )
+
+    # Export the private key in PEM format
+    pem_private = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption()
+    )
+
+    # Generate the public key
+    public_key = private_key.public_key()
+    # Export the public key in PEM format
+    pem_public = public_key.public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo
+    )
+
+    return pem_private, pem_public
+
+# Generate the keys
+private_key, public_key = generate_rsa_keys()
+
+# Output the keys to console or write to files
+print("Private Key:")
+print(private_key.decode())
+print("\nPublic Key:")
+print(public_key.decode())
 
 
 if __name__ == "__main__":
