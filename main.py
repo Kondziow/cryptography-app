@@ -5,9 +5,10 @@ from cryptography.hazmat.primitives import serialization
 import hashlib
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding
-import xml.etree.ElementTree as ET
-import os
+from xml.etree import ElementTree as ET
+from xml.dom import minidom
 import datetime
+import os
 
 class SignatureApp:
     def __init__(self, root):
@@ -86,9 +87,15 @@ class SignatureApp:
         ET.SubElement(root, "Signature").text = signature.hex()
         ET.SubElement(root, "Timestamp").text = datetime.datetime.now().isoformat()
 
-        tree = ET.ElementTree(root)
+        # Convert to pretty XML format
+        rough_string = ET.tostring(root, 'utf-8')
+        reparsed = minidom.parseString(rough_string)
+        pretty_xml = reparsed.toprettyxml(indent="  ")
+
+        # Save the pretty XML to a file
         xml_file_name = os.path.basename(self.filepath.get()) + ".signature.xml"
-        tree.write(xml_file_name)
+        with open(xml_file_name, 'w') as xml_file:
+            xml_file.write(pretty_xml)
 
         self.status.set(f"Document signed successfully. Signature saved to {xml_file_name}")
 
