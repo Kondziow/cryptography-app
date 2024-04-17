@@ -2,6 +2,12 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization
+import hashlib
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import padding
+import xml.etree.ElementTree as ET
+import os
+import datetime
 
 class SignatureApp:
     def __init__(self, root):
@@ -48,8 +54,43 @@ class SignatureApp:
             messagebox.showerror("Error", "No file selected!")
             self.status.set("Select a file to sign.")
             return
-        # Placeholder for signing logic
-        self.status.set("Document signed successfully (placeholder).")
+
+        # Read the content of the file
+        try:
+            with open(self.filepath.get(), 'rb') as f:
+                document_data = f.read()
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to read the file: {str(e)}")
+            return
+
+        # Calculate the hash of the document
+        document_hash = hashlib.sha256(document_data).hexdigest()
+
+        # Sign the hash using the private RSA key
+        try:
+            signature = self.private_key.sign(
+                document_data,
+                padding.PSS(
+                    mgf=padding.MGF1(hashes.SHA256()),
+                    salt_length=padding.PSS.MAX_LENGTH
+                ),
+                hashes.SHA256()
+            )
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to sign the document: {str(e)}")
+            return
+
+        # Generate XML signature file
+        root = ET.Element("Signature")
+        ET.SubElement(root, "DocumentHash").text = document_hash
+        ET.SubElement(root, "Signature").text = signature.hex()
+        ET.SubElement(root, "Timestamp").text = datetime.datetime.now().isoformat()
+
+        tree = ET.ElementTree(root)
+        xml_file_name = os.path.basename(self.filepath.get()) + ".signature.xml"
+        tree.write(xml_file_name)
+
+        self.status.set(f"Document signed successfully. Signature saved to {xml_file_name}")
 
     def encrypt_decrypt(self):
         if not self.filepath.get():
@@ -83,17 +124,22 @@ def generate_rsa_keys():
 
     return pem_private, pem_public
 
-# Generate the keys
-private_key, public_key = generate_rsa_keys()
-
 # Output the keys to console or write to files
-print("Private Key:")
-print(private_key.decode())
-print("\nPublic Key:")
-print(public_key.decode())
+# print("Private Key:")
+# print(private_key.decode())
+# print("\nPublic Key:")
+# print(public_key.decode())
 
 
 if __name__ == "__main__":
+    private_key, public_key = generate_rsa_keys()
     root = tk.Tk()
     app = SignatureApp(root)
+    app.private_key = serialization.load_pem_private_key(
+        private_key,
+        password=None
+    )
+    app.public_key = serialization.load_pem_public_key(
+        public_key
+    )
     root.mainloop()
