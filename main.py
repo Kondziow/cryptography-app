@@ -219,6 +219,10 @@ class SignatureApp:
             messagebox.showerror("Error", f"Failed to generate RSA keys: {str(e)}")
             self.status.set("RSA key generation failed.")
 
+        self.update_sign_button_state()
+        self.update_icon("Select Public Key", True)
+        self.update_icon("Select Private Key", True)
+
     def verify_signature(self):
         signature_file = filedialog.askopenfilename(title="Select the signature XML file",
                                                     filetypes=[('XML files', '*.xml')])
