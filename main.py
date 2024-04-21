@@ -40,6 +40,9 @@ class SignatureApp:
         self.status_label = tk.Label(self.frame, textvariable=self.status)
         self.status_label.pack(side=tk.BOTTOM, fill=tk.X, expand=True)
 
+        # Generate keys
+        self.generate_rsa_keys()
+
     def select_file(self):
         file_types = [('PDF files', '*.pdf'), ('C++ Source files', '*.cpp')]
         filepath = filedialog.askopenfilename(title="Select a file", filetypes=file_types)
@@ -56,7 +59,6 @@ class SignatureApp:
             self.status.set("Select a file to sign.")
             return
 
-        # Read the content of the file
         try:
             with open(self.filepath.get(), 'rb') as f:
                 document_data = f.read()
@@ -64,13 +66,11 @@ class SignatureApp:
             messagebox.showerror("Error", f"Failed to read the file: {str(e)}")
             return
 
-        # Calculate the hash of the document
-        document_hash = hashlib.sha256(document_data).hexdigest()
+        document_hash = hashlib.sha256(document_data).digest()
 
-        # Sign the hash using the private RSA key
         try:
             signature = self.private_key.sign(
-                document_data,
+                document_hash,
                 padding.PSS(
                     mgf=padding.MGF1(hashes.SHA256()),
                     salt_length=padding.PSS.MAX_LENGTH
@@ -81,18 +81,15 @@ class SignatureApp:
             messagebox.showerror("Error", f"Failed to sign the document: {str(e)}")
             return
 
-        # Generate XML signature file
         root = ET.Element("Signature")
-        ET.SubElement(root, "DocumentHash").text = document_hash
+        ET.SubElement(root, "DocumentHash").text = document_hash.hex()
         ET.SubElement(root, "Signature").text = signature.hex()
         ET.SubElement(root, "Timestamp").text = datetime.datetime.now().isoformat()
 
-        # Convert to pretty XML format
         rough_string = ET.tostring(root, 'utf-8')
         reparsed = minidom.parseString(rough_string)
         pretty_xml = reparsed.toprettyxml(indent="  ")
 
-        # Save the pretty XML to a file
         xml_file_name = os.path.basename(self.filepath.get()) + ".signature.xml"
         with open(xml_file_name, 'w') as xml_file:
             xml_file.write(pretty_xml)
@@ -104,49 +101,32 @@ class SignatureApp:
             messagebox.showerror("Error", "No file selected!")
             self.status.set("Select a file to encrypt/decrypt.")
             return
-        # Placeholder for encryption/decryption logic
         self.status.set("File encrypted/decrypted successfully (placeholder).")
 
-def generate_rsa_keys():
-    # Generate a private key
-    private_key = rsa.generate_private_key(
-        public_exponent=65537,
-        key_size=4096
-    )
+    def generate_rsa_keys(self):
+        # Generowanie prywatnego klucza
+        self.private_key = rsa.generate_private_key(
+            public_exponent=65537,
+            key_size=4096
+        )
 
-    # Export the private key in PEM format
-    pem_private = private_key.private_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PrivateFormat.PKCS8,
-        encryption_algorithm=serialization.NoEncryption()
-    )
+        # Eksport prywatnego klucza do formatu PEM
+        self.pem_private = self.private_key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption()
+        )
 
-    # Generate the public key
-    public_key = private_key.public_key()
-    # Export the public key in PEM format
-    pem_public = public_key.public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo
-    )
+        # Generowanie publicznego klucza z prywatnego
+        self.public_key = self.private_key.public_key()
 
-    return pem_private, pem_public
-
-# Output the keys to console or write to files
-# print("Private Key:")
-# print(private_key.decode())
-# print("\nPublic Key:")
-# print(public_key.decode())
-
+        # Eksport publicznego klucza do formatu PEM
+        self.pem_public = self.public_key.public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo
+        )
 
 if __name__ == "__main__":
-    private_key, public_key = generate_rsa_keys()
     root = tk.Tk()
     app = SignatureApp(root)
-    app.private_key = serialization.load_pem_private_key(
-        private_key,
-        password=None
-    )
-    app.public_key = serialization.load_pem_public_key(
-        public_key
-    )
     root.mainloop()
