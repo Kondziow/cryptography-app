@@ -23,6 +23,7 @@ class SignatureApp:
         self.filepath = None
         self.public_key = None
         self.private_key = None
+        self.signature_file_path = None
 
         # Setup frames
         self.top_frame = tk.Frame(self.root)
@@ -55,7 +56,7 @@ class SignatureApp:
         self.sign_button = tk.Button(self.root, text="Sign Document", command=self.sign_document, state=tk.DISABLED)
         self.sign_button.pack(pady=5)
 
-        self.verify_button = tk.Button(self.root, text="Verify Signature", command=self.verify_signature)
+        self.verify_button = tk.Button(self.root, text="Verify Signature", command=self.verify_signature,state=tk.DISABLED)
         self.verify_button.pack(pady=5)
 
         self.keygen_button = tk.Button(self.root, text="Generate RSA Keys", command=self.generate_rsa_keys)
@@ -66,6 +67,12 @@ class SignatureApp:
         self.status_label = tk.Label(self.root, textvariable=self.status)
         self.status_label.pack(side=tk.BOTTOM, fill=tk.X)
 
+    def update_verify_button_state(self):
+        # Enable the verify button only if all required files are loaded
+        if self.public_key and self.signature_file_path and self.filepath:
+            self.verify_button['state'] = tk.NORMAL
+        else:
+            self.verify_button['state'] = tk.DISABLED
     def update_sign_button_state(self):
         if self.filepath and self.public_key and self.private_key:
             self.sign_button['state'] = tk.NORMAL
@@ -83,6 +90,7 @@ class SignatureApp:
             self.update_icon("Select Document", False)
             self.status.set("File selection cancelled.")
         self.update_sign_button_state()
+        self.update_verify_button_state()
 
     def select_public_key(self):
         file_types = [('PEM files', '*.pem')]
@@ -103,6 +111,7 @@ class SignatureApp:
             self.update_icon("Select Public Key", False)
             self.status.set("Public key selection cancelled.")
         self.update_sign_button_state()
+        self.update_verify_button_state()
 
     def select_private_key(self):
         file_types = [('PEM files', '*.pem')]
@@ -128,6 +137,7 @@ class SignatureApp:
         file_types = [('XML files', '*.xml')]
         signature_file_path = filedialog.askopenfilename(title="Select Signature File", initialdir=os.getcwd(),
                                                          filetypes=file_types)
+
         if signature_file_path:
             self.signature_file_path = signature_file_path
             self.update_icon("Select Signature", True)
@@ -135,6 +145,8 @@ class SignatureApp:
         else:
             self.update_icon("Select Signature", False)
             self.status.set("Signature file selection cancelled.")
+
+        self.update_verify_button_state()
 
     def update_icon(self, option, success):
         icon_label = self.icons[option]
@@ -224,39 +236,18 @@ class SignatureApp:
         self.update_icon("Select Private Key", True)
 
     def verify_signature(self):
-        signature_file = filedialog.askopenfilename(title="Select the signature XML file",
-                                                    filetypes=[('XML files', '*.xml')])
-        if not signature_file:
-            messagebox.showerror("Error", "No signature file selected!")
-            return
-
-        public_key_file = filedialog.askopenfilename(title="Select the public key PEM file",
-                                                     filetypes=[('PEM files', '*.pem')])
-        if not public_key_file:
-            messagebox.showerror("Error", "No public key file selected!")
-            return
-
-        document_file = filedialog.askopenfilename(title="Select the original document file",
-                                                   filetypes=[('All files', '*.*')])
-        if not document_file:
-            messagebox.showerror("Error", "No document file selected!")
-            return
-
         try:
-            with open(document_file, 'rb') as f:
+            with open(self.filepath, 'rb') as f:
                 document_data = f.read()
             document_hash = hashlib.sha256(document_data).digest()
 
-            with open(public_key_file, 'rb') as key_file:
-                public_key = serialization.load_pem_public_key(key_file.read())
-
             # Load the signature XML
-            tree = ET.parse(signature_file)
+            tree = ET.parse(self.signature_file_path)
             root = tree.getroot()
             signature = bytes.fromhex(root.find('Signature').text)
 
-            # Verify the signature
-            public_key.verify(
+            # Verify the signature using the already loaded public key
+            self.public_key.verify(
                 signature,
                 document_hash,
                 padding.PSS(
@@ -269,6 +260,7 @@ class SignatureApp:
         except Exception as e:
             messagebox.showerror("Error", f"Verification failed: {str(e)}")
             self.status.set("Verification failed.")
+
 
 if __name__ == "__main__":
     root = tk.Tk()
