@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, simpledialog
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization
@@ -119,10 +119,17 @@ class SignatureApp:
             if 'removable' in drive.opts:
                 private_key_path = os.path.join(drive.mountpoint, 'private_key.pem')
                 if os.path.exists(private_key_path):
+                    pin = simpledialog.askstring("PIN", "Enter PIN for the private key:", show='*')
+                    if not pin:
+                        messagebox.showwarning("Warning", "PIN is required to load the private key.")
+                        self.update_icon("Load Private Key from Pendrive", False)
+                        self.status.set("Failed to load private key: PIN is required.")
+                        return
+
                     try:
                         with open(private_key_path, 'rb') as f:
                             private_key_data = f.read()
-                            self.private_key = serialization.load_pem_private_key(private_key_data, password=None, backend=default_backend())
+                            self.private_key = serialization.load_pem_private_key(private_key_data, password=pin.encode(), backend=default_backend())
                         self.update_icon("Load Private Key from Pendrive", True)
                         self.status.set("Private key loaded successfully from USB.")
                         self.update_sign_button_state()
@@ -194,6 +201,12 @@ class SignatureApp:
         self.status.set(f"Document signed successfully. Signature saved to {xml_file_name}")
 
     def generate_rsa_keys(self):
+        pin = simpledialog.askstring("PIN", "Enter PIN to encrypt the private key:", show='*')
+        if not pin:
+            messagebox.showwarning("Warning", "PIN is required to generate the keys.")
+            self.status.set("Failed to generate RSA keys: PIN is required.")
+            return
+
         try:
             # Generate private key
             self.private_key = rsa.generate_private_key(
@@ -201,11 +214,11 @@ class SignatureApp:
                 key_size=4096
             )
 
-            # Export private key to PEM format
+            # Export private key to PEM format with PIN encryption
             pem_private = self.private_key.private_bytes(
                 encoding=serialization.Encoding.PEM,
                 format=serialization.PrivateFormat.PKCS8,
-                encryption_algorithm=serialization.NoEncryption()
+                encryption_algorithm=serialization.BestAvailableEncryption(pin.encode())
             )
 
             # Generate public key from private key
