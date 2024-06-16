@@ -1,6 +1,5 @@
 import tkinter as tk
 from tkinter import filedialog, messagebox
-
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization
@@ -13,6 +12,7 @@ from xml.etree import ElementTree as ET
 from xml.dom import minidom
 import datetime
 import os
+import psutil
 
 class SignatureApp:
     def __init__(self, root):
@@ -33,7 +33,7 @@ class SignatureApp:
         self.options = [
             ("Select Document", self.select_file),
             ("Select Public Key", self.select_public_key),
-            ("Select Private Key", self.select_private_key),
+            ("Load Private Key from Pendrive", self.select_private_key),
             ("Select Signature", self.select_signature)
         ]
         self.icons = {}
@@ -56,7 +56,7 @@ class SignatureApp:
         self.sign_button = tk.Button(self.root, text="Sign Document", command=self.sign_document, state=tk.DISABLED)
         self.sign_button.pack(pady=5)
 
-        self.verify_button = tk.Button(self.root, text="Verify Signature", command=self.verify_signature,state=tk.DISABLED)
+        self.verify_button = tk.Button(self.root, text="Verify Signature", command=self.verify_signature, state=tk.DISABLED)
         self.verify_button.pack(pady=5)
 
         self.keygen_button = tk.Button(self.root, text="Generate RSA Keys", command=self.generate_rsa_keys)
@@ -73,8 +73,9 @@ class SignatureApp:
             self.verify_button['state'] = tk.NORMAL
         else:
             self.verify_button['state'] = tk.DISABLED
+
     def update_sign_button_state(self):
-        if self.filepath and self.public_key and self.private_key:
+        if self.filepath  and self.private_key:
             self.sign_button['state'] = tk.NORMAL
         else:
             self.sign_button['state'] = tk.DISABLED
@@ -94,8 +95,7 @@ class SignatureApp:
 
     def select_public_key(self):
         file_types = [('PEM files', '*.pem')]
-        public_key_path = filedialog.askopenfilename(title="Select Public Key File", initialdir=os.getcwd(),
-                                                     filetypes=file_types)
+        public_key_path = filedialog.askopenfilename(title="Select Public Key File", initialdir=os.getcwd(), filetypes=file_types)
         if public_key_path:
             try:
                 with open(public_key_path, 'rb') as f:
@@ -114,30 +114,32 @@ class SignatureApp:
         self.update_verify_button_state()
 
     def select_private_key(self):
-        file_types = [('PEM files', '*.pem')]
-        private_key_path = filedialog.askopenfilename(title="Select Private Key File", initialdir=os.getcwd(),
-                                                      filetypes=file_types)
-        if private_key_path:
-            try:
-                with open(private_key_path, 'rb') as f:
-                    private_key_data = f.read()
-                    self.private_key = serialization.load_pem_private_key(private_key_data, password=None, backend=default_backend())
-                self.update_icon("Select Private Key", True)
-                self.status.set("Private key loaded successfully.")
-            except Exception as e:
-                messagebox.showerror("Error", f"Failed to load private key: {str(e)}")
-                self.update_icon("Select Private Key", False)
-                self.status.set("Failed to load private key.")
-        else:
-            self.update_icon("Select Private Key", False)
-            self.status.set("Private key selection cancelled.")
+        self.status.set("Searching for USB drive...")
+        for drive in psutil.disk_partitions():
+            if 'removable' in drive.opts:
+                private_key_path = os.path.join(drive.mountpoint, 'private_key.pem')
+                if os.path.exists(private_key_path):
+                    try:
+                        with open(private_key_path, 'rb') as f:
+                            private_key_data = f.read()
+                            self.private_key = serialization.load_pem_private_key(private_key_data, password=None, backend=default_backend())
+                        self.update_icon("Load Private Key from Pendrive", True)
+                        self.status.set("Private key loaded successfully from USB.")
+                        self.update_sign_button_state()
+                        return
+                    except Exception as e:
+                        messagebox.showerror("Error", f"Failed to load private key from USB: {str(e)}")
+                        self.update_icon("Load Private Key from Pendrive", False)
+                        self.status.set("Failed to load private key from USB.")
+                        return
+
+        self.update_icon("Load Private Key from Pendrive", False)
+        self.status.set("No USB drive with private_key.pem found.")
         self.update_sign_button_state()
 
     def select_signature(self):
         file_types = [('XML files', '*.xml')]
-        signature_file_path = filedialog.askopenfilename(title="Select Signature File", initialdir=os.getcwd(),
-                                                         filetypes=file_types)
-
+        signature_file_path = filedialog.askopenfilename(title="Select Signature File", initialdir=os.getcwd(), filetypes=file_types)
         if signature_file_path:
             self.signature_file_path = signature_file_path
             self.update_icon("Select Signature", True)
@@ -145,7 +147,6 @@ class SignatureApp:
         else:
             self.update_icon("Select Signature", False)
             self.status.set("Signature file selection cancelled.")
-
         self.update_verify_button_state()
 
     def update_icon(self, option, success):
@@ -164,7 +165,6 @@ class SignatureApp:
             return
 
         document_hash = hashlib.sha256(document_data).digest()
-
         try:
             signature = self.private_key.sign(
                 document_hash,
@@ -233,7 +233,7 @@ class SignatureApp:
 
         self.update_sign_button_state()
         self.update_icon("Select Public Key", True)
-        self.update_icon("Select Private Key", True)
+        self.update_icon("Load Private Key from Pendrive", True)
 
     def verify_signature(self):
         try:
@@ -260,7 +260,6 @@ class SignatureApp:
         except Exception as e:
             messagebox.showerror("Error", f"Verification failed: {str(e)}")
             self.status.set("Verification failed.")
-
 
 if __name__ == "__main__":
     root = tk.Tk()
